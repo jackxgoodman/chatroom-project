@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html> 
+	<head>
+     	<title>Chatroom</title>
+		<style type="text/css">
+			html, body
+				{
+				padding: 0;
+				margin: 0;
+				height: 100%;
+				min-height: 100%;
+				background: white;
+				}
+			.tl { position: absolute; top: 0%; left: 0%; right: 30%; bottom: 65%; 
+			      border:solid #000; border-width: 1px; overflow: scroll;}
+			.tr { position: absolute; top: 0%; left: 70%; right: 0%; bottom: 50%; 
+			      border:solid #000; border-width: 1px; overflow: scroll; }
+			.bl { position: absolute; top: 35%; left: 0%; right: 30%; bottom: 0%; 
+			      border:solid #000; border-width: 1px; overflow: scroll;}
+			.br { position: absolute; top: 50%; left: 70%; right: 0%; bottom: 0%; 
+				  border:solid #000; border-width: 1px; overflow: scroll; }
+			#logindiv {
+				display: block;
+			}
+			#logoutdiv {
+				display: none;
+			}
+		</style>
+		<script src="/socket.io/socket.io.js"></script>
+		<script type ="text/javascript">
+			var socketio = io.connect();
+			var user = "";
+			var currentRoom = "";
+			var randToken;
+			
+			socketio.on("message_to_client",function(data) {
+			//Append an HR thematic break and the escaped HTML of the new message
+				if (data.chatroom == currentRoom) {
+					if (data.pmTo == "") {
+						document.getElementById("chatlog").appendChild(document.createElement("hr"));
+						var div = document.createElement("div");
+						if (data.isAnon) {
+							div.innerHTML = "Anonymous user: " + data['message'];
+						} else {
+							div.innerHTML = data['username'] + ": " + data['message'];
+						}
+						
+						if (data.isCS) {
+							div.style.fontFamily = '"Comic Sans MS", cursive, sans-serif';
+						} else if (data.isSS) {
+							div.style.fontFamily = 'sans-serif';
+						}
+						document.getElementById("chatlog").appendChild(div);
+						
+						
+					} else {
+						if (data.pmTo == user) {
+							document.getElementById("chatlog").appendChild(document.createElement("hr"));
+							var div = document.createElement("div");
+							div.innerHTML = "PM from " + data['username'] + ": " + data['message'];
+							
+							if (data.isCS) {
+								div.style.fontFamily = '"Comic Sans MS", cursive, sans-serif';
+							} else if (data.isSS) {
+								div.style.fontFamily = '"sans-serif"';
+							}
+							document.getElementById("chatlog").appendChild(div);
+							
+						
+						}
+						if (data.username == user) {
+							document.getElementById("chatlog").appendChild(document.createElement("hr"));
+							var div = document.createElement("div");
+							div.innerHTML = "PM to " + data['pmTo'] + ": " + data['message'];
+							
+							if (data.isCS) {
+								div.style.fontFamily = '"Comic Sans MS", cursive, sans-serif';
+							} else if (data.isSS) {
+								div.style.fontFamily = '"sans-serif"';
+							}
+							document.getElementById("chatlog").appendChild(div);
+							
+							
+						}
+					}
+				}
+			});
+			
+			function sendMessage(){
+				if (user != "" && currentRoom != "") {
+					var msg = document.getElementById("message_input").value;
+					var pmTo = document.getElementById("private_user").value;
+					document.getElementById("message_input").value = "";
+					document.getElementById("private_user").value = "";
+					var isCS = document.getElementById('cs').checked;
+					var isSS = document.getElementById('ss').checked;
+					var isAnon = document.getElementById('anon').checked;
+					socketio.emit("message_to_server", {message:msg, username:user, chatroom:currentRoom, pmTo:pmTo, isCS:isCS, isSS:isSS, isAnon:isAnon});
+				}
+			}
+			
+			function login() {
+				randToken = Math.random();
+				user = document.getElementById("loguser").value;
+				document.getElementById("logindiv").style.display =  "none";
+				document.getElementById("logoutdiv").style.display = "block";
+				document.getElementsByClassName("tr")[0].style.visibility = "visible";
+				document.getElementsByClassName("bl")[0].style.visibility = "visible";
+				document.getElementsByClassName("br")[0].style.visibility = "visible";
+				
+				socketio.emit("login", {username: user, rand:randToken});
+				
+			}
+			
+			socketio.on("login_failed", function(data) {
+				if (randToken == data.rand) {
+					alert("Login Failed!");
+					user = "";
+					document.getElementById("logindiv").style.display =  "block";
+					document.getElementById("logoutdiv").style.display = "none";
+					document.getElementById("chatlog").innerHTML = "";
+					document.getElementById("current_room").innerHTML = "Current Room: "
+					document.getElementsByClassName("tr")[0].style.visibility = "hidden";
+					document.getElementsByClassName("bl")[0].style.visibility = "hidden";
+					document.getElementsByClassName("br")[0].style.visibility = "hidden";
+				}
+				
+			});
+			
+			function logout() {
+				socketio.emit('logout', {user:user})
+				user = "";
+				currentRoom = "";
+				document.getElementById("logindiv").style.display =  "block";
+				document.getElementById("logoutdiv").style.display = "none";
+				document.getElementById("chatlog").innerHTML = "";
+				document.getElementById("current_room").innerHTML = "Current Room: "
+				document.getElementsByClassName("tr")[0].style.visibility = "hidden";
+				document.getElementsByClassName("bl")[0].style.visibility = "hidden";
+				document.getElementsByClassName("br")[0].style.visibility = "hidden";
+				document.getElementById("temp_kick").style.visibility = "hidden";
+			}
+			
+			function newRoom(){
+				var newRoomName = document.getElementById("new_room_input").value;
+				var newRoomPass = document.getElementById("new_room_pass").value;
+				//alert(newRoomPass);
+				document.getElementById("new_room_input").value = "";
+				document.getElementById("new_room_pass").value = "";
+				if (user != "") {
+					socketio.emit("new_room", {roomName: newRoomName, password: newRoomPass, creator: user})
+				}
+			}
+			
+			socketio.on("room_update", function(data) {
+				
+				//alert("login success");
+				
+				document.getElementById("roomlog").innerHTML = "";
+				var cRooms = data.rooms;
+				for (var i = 0; i < Object.keys(cRooms).length - 1; i++) {
+					roomKey = "room" + i; 
+					document.getElementById("roomlog").appendChild(document.createElement("hr"));
+					if (cRooms[roomKey].roomPass == "") {
+						document.getElementById("roomlog").appendChild(document.createTextNode(data.rooms[roomKey].roomName));
+					} else {
+						document.getElementById("roomlog").appendChild(document.createTextNode(data.rooms[roomKey].roomName + " (Private)"));
+					}
+					
+					//FIXME: if user is creator, add banning privileges
+					
+					
+				}
+			});
+			
+			function joinRoom() {
+				var toJoin = document.getElementById("join_room").value;
+				var toJoinPass = document.getElementById("join_room_pass").value;
+				document.getElementById("join_room").value = "";
+				document.getElementById("join_room_pass").value = "";
+				if (user != "") {
+					socketio.emit("join_room", {roomName:toJoin, password: toJoinPass, username:user});
+				}
+				
+			}
+			
+			socketio.on("room_joined", function(data) {
+				var jRooms = data.inRoom;
+				for (var j = 0; j < Object.keys(jRooms).length - 1; j++) {
+					if (user == jRooms[j]) {
+						if (user == data.username) {
+							document.getElementById("chatlog").innerHTML = "";
+							currentRoom = data.room;
+							document.getElementById("current_room").innerHTML = "Current Room: " + currentRoom;
+							document.getElementById("temp_kick").style.visibility = "hidden";
+							if (user == data.creator) {
+								document.getElementById("temp_kick").style.visibility = "visible";
+							}
+						}
+						
+						socketio.emit("update_room_users");
+						
+						//document.getElementById("userlog").innerHTML = "";
+						//for (var i = 0; i < Object.keys(jRooms).length - 1; i++) {
+						//	document.getElementById("userlog").appendChild(document.createElement("hr"));
+						//	document.getElementById("userlog").appendChild(document.createTextNode(data.inRoom[i]));
+						//}
+					}
+				}
+					
+			});
+			
+			socketio.on("room_not_joined", function(data) {
+				if (user == data.username) {
+					alert("Room not joined! Oops!");
+				}
+			});
+			
+			socketio.on("room_users_updated", function(data) {
+				var info = data.userInfo;
+				document.getElementById("userlog").innerHTML = "";
+				for (var i = 0; i < Object.keys(info).length - 1; i++) {
+					if (info[i].room == currentRoom) {
+						document.getElementById("userlog").appendChild(document.createElement("hr"));
+						document.getElementById("userlog").appendChild(document.createTextNode(info[i].username));
+					}
+				}
+			});
+			
+			function kickUser() {
+				var userToKick = document.getElementById("kicked_user").value;
+				document.getElementById("kicked_user").value = "";
+				socketio.emit("kick_user", {username: userToKick, room:currentRoom});
+			}
+			
+			socketio.on("user_kicked", function(data) {
+				if (user == data.username && currentRoom == data.room) {
+					currentRoom = "";
+					document.getElementById("chatlog").innerHTML = "";
+					document.getElementById("current_room").innerHTML = "Current Room: ";
+					socketio.emit("update_room_users");
+					alert("You were kicked from the chat...awks");
+				}
+			});
+			
+		</script>
+	</head>
+	<body>
+	    <div class="tl">
+	    	<h1> Chatroom </h1>
+				<div id="logindiv">
+	    		Login:
+	    		<br>
+	     		<input type="text" id="loguser"/>
+	      		<button id="login" onclick="login()">Login</button>
+				</div>
+				<div id="logoutdiv">
+	      		<button id="logout" onclick="logout()" >Logout</button>
+				</div>
+				
+		    	Send Message:
+		    	<br>
+				Send PM To (optional):<input type="text" id="private_user" />
+				<br>
+	     		Message: <input type="text" id="message_input"/>
+				<br>
+				<input type="checkbox" id="anon"> Anonymous Message
+				<br>
+	      		<button onclick="sendMessage()">send</button>
+				<br>
+				<input type="radio" name="font" value="reg" id="reg" checked> Standard
+				<input type="radio" name="font" value="sans-serif" id="ss"> Sans Serif
+				<input type="radio" name="font" value="cs" id="cs"> Comic Sans
+	    </div>
+	    <div class="tr" >
+	    	<h3>Rooms</h3>
+			<h4 id="current_room">Current Room: </h4>
+      		<div id="roomlog"></div>
+			<hr>
+			Room name: <input type="text" id="new_room_input" />
+			<br>
+			Password (optional): <input type="text" id="new_room_pass" />
+			<button onclick="newRoom()">Create New Room</button>
+			<br><br>
+			Room name: <input type="text" id="join_room" />
+			<br>
+			Password (optional): <input type="text" id="join_room_pass" />
+			<button onclick="joinRoom()">Join Room</button>
+	    </div>
+	    <div class="bl">
+	    	<h3>What's been said:</h3>
+      		<div id="chatlog"></div> 
+	    </div>
+	    <div class="br">
+	    	<h3>Users</h3>
+      		<div id="userlog"></div>
+			<div id="temp_kick" style="visibility: hidden">
+				<input type="text" id="kicked_user" />
+				<button onclick="kickUser()">Kick User</button>
+			</div>
+	    </div>
+	</body>
+</html>
